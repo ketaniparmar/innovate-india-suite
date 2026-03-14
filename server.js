@@ -3,8 +3,12 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
-const dns = require('dns'); // Required for the IPv4 Override
+const dns = require('dns');
+const util = require('util');
 const { createClient } = require('@supabase/supabase-js');
+
+// Promisify DNS lookup for our Raw IP Override
+const lookupAsync = util.promisify(dns.lookup);
 
 const app = express();
 
@@ -13,24 +17,7 @@ const supabaseUrl = process.env.SUPABASE_URL || 'https://udljxsjkqdrpqmxamwkd.su
 const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbGp4c2prcWRycHFteGFtd2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0Mzg1NDAsImV4cCI6MjA4ODAxNDU0MH0.gXuw6cNBRr8HCAOOsB3Z3xYuUDeIvDlXXIcvhuTKe_c';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- 2. CONFIGURE BULLETPROOF SMTP ---
-const transporter = nodemailer.createTransport({
-    host: 'smtp.hostinger.com',
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.SMTP_USER || 'director@hospitalprojectconsultancy.com',
-        pass: process.env.SMTP_PASS
-    },
-    // THE HAMMER: Intercept the DNS request and absolutely force an IPv4 address
-    lookup: (hostname, options, callback) => {
-        dns.lookup(hostname, { family: 4 }, (err, address, family) => {
-            callback(err, address, family);
-        });
-    }
-});
-
-// --- 3. CONFIGURE CORS ---
+// --- 2. CONFIGURE CORS ---
 app.use(cors({
     origin: ['http://localhost:5173', 'https://innovate-indai.vercel.app'],
     methods: ['POST', 'OPTIONS'],
@@ -38,7 +25,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// --- 4. MAIN ROUTE ---
+// --- 3. MAIN ROUTE ---
 app.post('/api/admin/generate-pdf', async (req, res) => {
     const { email, projectName, bedCount, specialtyFocus, cityTier, totalArea, numFloors } = req.body;
     let browser;
@@ -99,6 +86,24 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
         const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, timeout: 120000 });
         await browser.close();
         console.log("PDF generated successfully.");
+
+        // --- THE ULTIMATE RAW IP OVERRIDE ---
+        console.log("Manually fetching Hostinger IPv4 address to bypass Render's IPv6 block...");
+        const { address } = await lookupAsync('smtp.hostinger.com', { family: 4 });
+        console.log(`Resolved Hostinger to raw IPv4: ${address}`);
+
+        const transporter = nodemailer.createTransport({
+            host: address, // We pass the raw number (e.g., 193.x.x.x), making IPv6 impossible.
+            port: 465,
+            secure: true,
+            auth: {
+                user: process.env.SMTP_USER || 'director@hospitalprojectconsultancy.com',
+                pass: process.env.SMTP_PASS // Ensure this is set in Render Environment Variables!
+            },
+            tls: {
+                servername: 'smtp.hostinger.com' // Tells Hostinger's security that we are connecting legitimately
+            }
+        });
 
         console.log(`Sending official SMTP email to ${email}...`);
         
