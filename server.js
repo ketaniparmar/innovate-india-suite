@@ -12,12 +12,12 @@ const supabaseUrl = process.env.SUPABASE_URL || 'https://udljxsjkqdrpqmxamwkd.su
 const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbGp4c2prcWRycHFteGFtd2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0Mzg1NDAsImV4cCI6MjA4ODAxNDU0MH0.gXuw6cNBRr8HCAOOsB3Z3xYuUDeIvDlXXIcvhuTKe_c';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- GMAIL SETUP ---
+// --- GMAIL SETUP (Hardcoded safely as strings) ---
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: process.env.innovateindiasurat@gmail.com,
-        pass: process.env.nolg iakg uyls crnh
+        user: 'innovateindiasurat@gmail.com',
+        pass: 'nolgiakguylscrnh' // Spaces must be removed for it to work!
     }
 });
 
@@ -88,7 +88,7 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
         console.log("Sending Email...");
         
         const mailOptions = {
-            from: '"Innovate India Desk" <' + process.env.SMTP_USER + '>',
+            from: '"Innovate India Desk" <innovateindiasurat@gmail.com>',
             to: email,
             subject: "Confidential: Hospital Feasibility Brief | " + projectName,
             html: "<h2>Feasibility Analysis Ready</h2><p>Dear Director,</p><p>We have completed the initial capital expenditure modeling for your project.</p><p>The detailed feasibility brief is attached to this email as a PDF.</p><br/><p>Regards,<br/><strong>Innovate India Strategy Desk</strong></p>",
