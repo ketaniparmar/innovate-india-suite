@@ -3,12 +3,7 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
-const dns = require('dns');
-const util = require('util');
 const { createClient } = require('@supabase/supabase-js');
-
-// Promisify DNS lookup for our Raw IP Override
-const lookupAsync = util.promisify(dns.lookup);
 
 const app = express();
 
@@ -17,7 +12,16 @@ const supabaseUrl = process.env.SUPABASE_URL || 'https://udljxsjkqdrpqmxamwkd.su
 const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbGp4c2prcWRycHFteGFtd2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0Mzg1NDAsImV4cCI6MjA4ODAxNDU0MH0.gXuw6cNBRr8HCAOOsB3Z3xYuUDeIvDlXXIcvhuTKe_c';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- 2. CONFIGURE CORS ---
+// --- 2. GMAIL TRANSPORTER ---
+const transporter = nodemailer.createTransport({
+    service: 'gmail', // This single word tells Node to trust Google's exact ports and IPs
+    auth: {
+        user: process.env.innovateindiasurat@gmail.com, // Your Gmail
+        pass: process.env.nolg iakg uyls crnh  // Your 16-letter App Password
+    }
+});
+
+// --- 3. CONFIGURE CORS ---
 app.use(cors({
     origin: ['http://localhost:5173', 'https://innovate-indai.vercel.app'],
     methods: ['POST', 'OPTIONS'],
@@ -25,7 +29,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// --- 3. MAIN ROUTE ---
+// --- 4. MAIN ROUTE ---
 app.post('/api/admin/generate-pdf', async (req, res) => {
     const { email, projectName, bedCount, specialtyFocus, cityTier, totalArea, numFloors } = req.body;
     let browser;
@@ -87,28 +91,10 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
         await browser.close();
         console.log("PDF generated successfully.");
 
-        // --- THE ULTIMATE RAW IP OVERRIDE ---
-        console.log("Manually fetching Hostinger IPv4 address to bypass Render's IPv6 block...");
-        const { address } = await lookupAsync('smtp.hostinger.com', { family: 4 });
-        console.log(`Resolved Hostinger to raw IPv4: ${address}`);
-
-        const transporter = nodemailer.createTransport({
-            host: address, // We pass the raw number (e.g., 193.x.x.x), making IPv6 impossible.
-            port: 465,
-            secure: true,
-            auth: {
-                user: process.env.SMTP_USER || 'director@hospitalprojectconsultancy.com',
-                pass: process.env.SMTP_PASS // Ensure this is set in Render Environment Variables!
-            },
-            tls: {
-                servername: 'smtp.hostinger.com' // Tells Hostinger's security that we are connecting legitimately
-            }
-        });
-
         console.log(`Sending official SMTP email to ${email}...`);
         
         const info = await transporter.sendMail({
-            from: '"Innovate India" <director@hospitalprojectconsultancy.com>', 
+            from: `"Innovate India Desk" <${process.env.SMTP_USER}>`, 
             to: email,
             subject: `Confidential: Hospital Feasibility Brief | ${projectName}`,
             html: `
