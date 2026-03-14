@@ -7,21 +7,20 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 
-// --- 1. INITIALIZE SUPABASE ---
+// --- SUPABASE SETUP ---
 const supabaseUrl = process.env.SUPABASE_URL || 'https://udljxsjkqdrpqmxamwkd.supabase.co';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbGp4c2prcWRycHFteGFtd2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0Mzg1NDAsImV4cCI6MjA4ODAxNDU0MH0.gXuw6cNBRr8HCAOOsB3Z3xYuUDeIvDlXXIcvhuTKe_c';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- 2. GMAIL TRANSPORTER ---
+// --- GMAIL SETUP ---
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // This single word tells Node to trust Google's exact ports and IPs
+    service: 'gmail',
     auth: {
-        user: process.env.innovateindiasurat@gmail.com, // Your Gmail
-        pass: process.env.nolg iakg uyls crnh  // Your 16-letter App Password
+        user: process.env.innovateindiasurat@gmail.com,
+        pass: process.env.nolg iakg uyls crnh
     }
 });
 
-// --- 3. CONFIGURE CORS ---
 app.use(cors({
     origin: ['http://localhost:5173', 'https://innovate-indai.vercel.app'],
     methods: ['POST', 'OPTIONS'],
@@ -29,24 +28,21 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// --- 4. MAIN ROUTE ---
 app.post('/api/admin/generate-pdf', async (req, res) => {
     const { email, projectName, bedCount, specialtyFocus, cityTier, totalArea, numFloors } = req.body;
     let browser;
 
     try {
-        console.log(`\n--- STARTING GENERATION FOR: ${projectName} ---`);
+        console.log("--- STARTING GENERATION ---");
 
         try {
             await supabase.from('projects').insert([{ 
-                project_name: projectName, director_email: email, tier: `Tier ${cityTier}`, 
+                project_name: projectName, director_email: email, tier: "Tier " + cityTier, 
                 bed_capacity: bedCount, specialty_focus: specialtyFocus, total_built_up_area: totalArea,
                 num_floors: numFloors, status: 'feasibility_lead'
             }]);
-            console.log("Database logged successfully.");
-        } catch (dbErr) { console.error("Supabase Save Failed:", dbErr.message); }
+        } catch (dbErr) { console.error("DB Error:", dbErr.message); }
 
-        console.log("Launching headless browser...");
         browser = await puppeteer.launch({ 
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'], 
             headless: "new" 
@@ -80,8 +76,7 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
                 <h2 style="margin:0; font-size: 32px; color: #2b6cb0;">₹${(bedCount * 0.52).toFixed(2)} - ₹${(bedCount * 0.78).toFixed(2)} Cr</h2>
             </div>
             <div class="footer">
-                <p>Innovate India Hospital Project Consultancy | Surat, Gujarat</p>
-                <p>hospitalprojectconsultancy.com</p>
+                <p>Innovate India Hospital Project Consultancy</p>
             </div>
         </body>
         </html>`;
@@ -89,32 +84,19 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
         await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 120000 });
         const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, timeout: 120000 });
         await browser.close();
-        console.log("PDF generated successfully.");
 
-        console.log(`Sending official SMTP email to ${email}...`);
+        console.log("Sending Email...");
         
-        const info = await transporter.sendMail({
-            from: `"Innovate India Desk" <${process.env.SMTP_USER}>`, 
+        const mailOptions = {
+            from: '"Innovate India Desk" <' + process.env.SMTP_USER + '>',
             to: email,
-            subject: `Confidential: Hospital Feasibility Brief | ${projectName}`,
-            html: `
-                <div style="font-family: sans-serif; color: #010810; line-height: 1.6;">
-                    <h2>Feasibility Analysis Ready</h2>
-                    <p>Dear Director,</p>
-                    <p>We have completed the initial capital expenditure modeling for <strong>${projectName}</strong>.</p>
-                    <p>The detailed feasibility brief is attached to this email as a PDF.</p>
-                    <br/>
-                    <p>Regards,<br/><strong>Innovate India Strategy Desk</strong></p>
-                </div>`,
-            attachments: [
-                {
-                    filename: `${projectName.replace(/[^a-z0-9]/gi, '_')}_Report.pdf`,
-                    content: pdfBuffer,
-                }
-            ],
-        });
+            subject: "Confidential: Hospital Feasibility Brief | " + projectName,
+            html: "<h2>Feasibility Analysis Ready</h2><p>Dear Director,</p><p>We have completed the initial capital expenditure modeling for your project.</p><p>The detailed feasibility brief is attached to this email as a PDF.</p><br/><p>Regards,<br/><strong>Innovate India Strategy Desk</strong></p>",
+            attachments: [{ filename: "Project_Report.pdf", content: pdfBuffer }]
+        };
 
-        console.log(`SUCCESS! Email sent. Message ID: ${info.messageId}`);
+        await transporter.sendMail(mailOptions);
+        console.log("SUCCESS! Email sent.");
         res.status(200).json({ success: true });
 
     } catch (err) {
@@ -125,4 +107,4 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Engine live on port ${PORT}`));
+app.listen(PORT, () => console.log("Engine live on port " + PORT));
