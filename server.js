@@ -7,17 +7,20 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 
-// --- 1. SUPABASE SETUP ---
+// --- SUPABASE SETUP ---
 const supabaseUrl = process.env.SUPABASE_URL || 'https://udljxsjkqdrpqmxamwkd.supabase.co';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbGp4c2prcWRycHFteGFtd2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0Mzg1NDAsImV4cCI6MjA4ODAxNDU0MH0.gXuw6cNBRr8HCAOOsB3Z3xYuUDeIvDlXXIcvhuTKe_c';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- 2. GMAIL SETUP (Hardcoded safely as strings to prevent crashes) ---
+// --- GMAIL SETUP (Forcing standard IPv4) ---
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    family: 4, // This forces Node to ignore Google's IPv6 and use IPv4 to bypass Render's block
     auth: {
         user: 'innovateindiasurat@gmail.com',
-        pass: 'nolgiakguylscrnh' // Your 16-letter App Password without spaces
+        pass: 'nolgiakguylscrnh' 
     }
 });
 
@@ -28,7 +31,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// --- 3. MAIN GENERATOR ROUTE ---
 app.post('/api/admin/generate-pdf', async (req, res) => {
     const { email, projectName, bedCount, specialtyFocus, cityTier, totalArea, numFloors } = req.body;
     let browser;
@@ -36,7 +38,6 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
     try {
         console.log("--- STARTING GENERATION ---");
 
-        // Save to Database
         try {
             await supabase.from('projects').insert([{ 
                 project_name: projectName, director_email: email, tier: "Tier " + cityTier, 
@@ -45,7 +46,6 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
             }]);
         } catch (dbErr) { console.error("DB Error:", dbErr.message); }
 
-        // Generate PDF
         browser = await puppeteer.launch({ 
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'], 
             headless: "new" 
@@ -87,20 +87,27 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
         await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 120000 });
         const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, timeout: 120000 });
         await browser.close();
+        console.log("PDF generated successfully.");
 
-        // Send Backup Email
-        console.log("Sending Email...");
-        const mailOptions = {
-            from: '"Innovate India Desk" <innovateindiasurat@gmail.com>',
-            to: email,
-            subject: "Confidential: Hospital Feasibility Brief | " + projectName,
-            html: "<h2>Feasibility Analysis Ready</h2><p>Dear Director,</p><p>We have completed the initial capital expenditure modeling for your project.</p><p>The detailed feasibility brief is attached to this email as a PDF.</p><br/><p>Regards,<br/><strong>Innovate India Strategy Desk</strong></p>",
-            attachments: [{ filename: "Project_Report.pdf", content: pdfBuffer }]
-        };
-        await transporter.sendMail(mailOptions);
-        
-        // Return file to Frontend for Direct Download
-        console.log("SUCCESS! Returning PDF for direct browser download.");
+        // --- ISOLATED EMAIL BLOCK ---
+        // If this fails, it will NOT crash the download!
+        console.log("Attempting to send backup email...");
+        try {
+            const mailOptions = {
+                from: '"Innovate India Desk" <innovateindiasurat@gmail.com>',
+                to: email,
+                subject: "Confidential: Hospital Feasibility Brief | " + projectName,
+                html: "<h2>Feasibility Analysis Ready</h2><p>Dear Director,</p><p>We have completed the initial capital expenditure modeling for your project.</p><p>The detailed feasibility brief is attached to this email as a PDF.</p><br/><p>Regards,<br/><strong>Innovate India Strategy Desk</strong></p>",
+                attachments: [{ filename: "Project_Report.pdf", content: pdfBuffer }]
+            };
+            await transporter.sendMail(mailOptions);
+            console.log("SUCCESS! Email sent.");
+        } catch (emailErr) {
+            console.log("Email blocked by Render firewall, but proceeding to direct download anyway. Error:", emailErr.message);
+        }
+
+        // --- DIRECT DOWNLOAD EXECUTION ---
+        console.log("Returning PDF for direct browser download...");
         res.status(200).json({ 
             success: true, 
             pdfBase64: pdfBuffer.toString('base64') 
