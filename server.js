@@ -3,25 +3,34 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
+const dns = require('dns'); // Required for the IPv4 Override
 const { createClient } = require('@supabase/supabase-js');
-
-// --- 1. GLOBAL IPv4 FIX ---
-// This forces the entire Node.js server to ignore IPv6, fixing the ENETUNREACH error.
-const dns = require('dns');
-dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 
-// --- 2. INITIALIZE SUPABASE ---
+// --- 1. INITIALIZE SUPABASE ---
 const supabaseUrl = process.env.SUPABASE_URL || 'https://udljxsjkqdrpqmxamwkd.supabase.co';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbGp4c2prcWRycHFteGFtd2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0Mzg1NDAsImV4cCI6MjA4ODAxNDU0MH0.gXuw6cNBRr8HCAOOsB3Z3xYuUDeIvDlXXIcvhuTKe_c';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- 3. CONFIGURE BULLETPROOF SMTP ---
-// Using Port 587, Secure: false, and family: 4 bypasses all cloud firewalls.
-transporter
+// --- 2. CONFIGURE BULLETPROOF SMTP ---
+const transporter = nodemailer.createTransport({
+    host: 'smtp.hostinger.com',
+    port: 465,
+    secure: true,
+    auth: {
+        user: process.env.SMTP_USER || 'director@hospitalprojectconsultancy.com',
+        pass: process.env.SMTP_PASS
+    },
+    // THE HAMMER: Intercept the DNS request and absolutely force an IPv4 address
+    lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { family: 4 }, (err, address, family) => {
+            callback(err, address, family);
+        });
+    }
+});
 
-// --- 4. CONFIGURE CORS ---
+// --- 3. CONFIGURE CORS ---
 app.use(cors({
     origin: ['http://localhost:5173', 'https://innovate-indai.vercel.app'],
     methods: ['POST', 'OPTIONS'],
@@ -29,7 +38,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// --- 5. MAIN ROUTE ---
+// --- 4. MAIN ROUTE ---
 app.post('/api/admin/generate-pdf', async (req, res) => {
     const { email, projectName, bedCount, specialtyFocus, cityTier, totalArea, numFloors } = req.body;
     let browser;
@@ -37,7 +46,6 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
     try {
         console.log(`\n--- STARTING GENERATION FOR: ${projectName} ---`);
 
-        // Database Save (Silently handled so it never crashes the email)
         try {
             await supabase.from('projects').insert([{ 
                 project_name: projectName, director_email: email, tier: `Tier ${cityTier}`, 
@@ -47,7 +55,6 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
             console.log("Database logged successfully.");
         } catch (dbErr) { console.error("Supabase Save Failed:", dbErr.message); }
 
-        // PDF Generation - Render Cold-Start Optimized
         console.log("Launching headless browser...");
         browser = await puppeteer.launch({ 
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'], 
@@ -88,20 +95,15 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
         </body>
         </html>`;
 
-        // 2-Minute timeout + domcontentloaded makes this extremely stable on free tiers
         await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 120000 });
         const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, timeout: 120000 });
         await browser.close();
         console.log("PDF generated successfully.");
 
-        // SMTP EMAIL DELIVERY
         console.log(`Sending official SMTP email to ${email}...`);
         
-        // Ensure the "From" address matches the authenticated user perfectly
-        const senderEmail = process.env.SMTP_USER || 'director@hospitalprojectconsultancy.com';
-        
         const info = await transporter.sendMail({
-            from: `"Innovate India" <${senderEmail}>`, 
+            from: '"Innovate India" <director@hospitalprojectconsultancy.com>', 
             to: email,
             subject: `Confidential: Hospital Feasibility Brief | ${projectName}`,
             html: `
