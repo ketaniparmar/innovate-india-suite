@@ -1,12 +1,16 @@
 require('dotenv').config();
 const express = require('express');
 const puppeteer = require('puppeteer');
-const nodemailer = require('nodemailer'); // USING SMTP NOW
+const nodemailer = require('nodemailer');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 
-const app = express();
+// --- THE FIX: FORCE IPv4 TO BYPASS RENDER'S IPv6 BLOCK ---
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
 
+const app = express();
+// ... (the rest of your code stays exactly the same)
 // 1. INITIALIZE SUPABASE
 const supabaseUrl = process.env.SUPABASE_URL || 'https://udljxsjkqdrpqmxamwkd.supabase.co';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbGp4c2prcWRycHFteGFtd2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0Mzg1NDAsImV4cCI6MjA4ODAxNDU0MH0.gXuw6cNBRr8HCAOOsB3Z3xYuUDeIvDlXXIcvhuTKe_c';
