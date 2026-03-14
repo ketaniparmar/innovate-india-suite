@@ -7,17 +7,17 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 
-// --- SUPABASE SETUP ---
+// --- 1. SUPABASE SETUP ---
 const supabaseUrl = process.env.SUPABASE_URL || 'https://udljxsjkqdrpqmxamwkd.supabase.co';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbGp4c2prcWRycHFteGFtd2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0Mzg1NDAsImV4cCI6MjA4ODAxNDU0MH0.gXuw6cNBRr8HCAOOsB3Z3xYuUDeIvDlXXIcvhuTKe_c';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- GMAIL SETUP (Hardcoded safely as strings) ---
+// --- 2. GMAIL SETUP (Hardcoded safely as strings to prevent crashes) ---
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
         user: 'innovateindiasurat@gmail.com',
-        pass: 'nolgiakguylscrnh' // Spaces must be removed for it to work!
+        pass: 'nolgiakguylscrnh' // Your 16-letter App Password without spaces
     }
 });
 
@@ -28,6 +28,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// --- 3. MAIN GENERATOR ROUTE ---
 app.post('/api/admin/generate-pdf', async (req, res) => {
     const { email, projectName, bedCount, specialtyFocus, cityTier, totalArea, numFloors } = req.body;
     let browser;
@@ -35,6 +36,7 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
     try {
         console.log("--- STARTING GENERATION ---");
 
+        // Save to Database
         try {
             await supabase.from('projects').insert([{ 
                 project_name: projectName, director_email: email, tier: "Tier " + cityTier, 
@@ -43,6 +45,7 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
             }]);
         } catch (dbErr) { console.error("DB Error:", dbErr.message); }
 
+        // Generate PDF
         browser = await puppeteer.launch({ 
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'], 
             headless: "new" 
@@ -85,8 +88,8 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
         const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, timeout: 120000 });
         await browser.close();
 
+        // Send Backup Email
         console.log("Sending Email...");
-        
         const mailOptions = {
             from: '"Innovate India Desk" <innovateindiasurat@gmail.com>',
             to: email,
@@ -94,10 +97,14 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
             html: "<h2>Feasibility Analysis Ready</h2><p>Dear Director,</p><p>We have completed the initial capital expenditure modeling for your project.</p><p>The detailed feasibility brief is attached to this email as a PDF.</p><br/><p>Regards,<br/><strong>Innovate India Strategy Desk</strong></p>",
             attachments: [{ filename: "Project_Report.pdf", content: pdfBuffer }]
         };
-
         await transporter.sendMail(mailOptions);
-        console.log("SUCCESS! Email sent.");
-        res.status(200).json({ success: true });
+        
+        // Return file to Frontend for Direct Download
+        console.log("SUCCESS! Returning PDF for direct browser download.");
+        res.status(200).json({ 
+            success: true, 
+            pdfBase64: pdfBuffer.toString('base64') 
+        });
 
     } catch (err) {
         if (browser) await browser.close();
