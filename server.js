@@ -19,16 +19,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- 3. CONFIGURE BULLETPROOF SMTP ---
 // Using Port 587, Secure: false, and family: 4 bypasses all cloud firewalls.
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-    port: process.env.SMTP_PORT || 587, // 587 is the safest port for cloud servers
-    secure: false, // MUST be false for 587 (it upgrades to secure TLS automatically)
-    family: 4, // THE MAGIC BULLET: Absolutely forces IPv4 connection
-    auth: {
-        user: process.env.SMTP_USER, // director@hospitalprojectconsultancy.com
-        pass: process.env.SMTP_PASS  // Your email password
-    }
-});
+transporter
 
 // --- 4. CONFIGURE CORS ---
 app.use(cors({
