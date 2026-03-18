@@ -7,9 +7,19 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 
-/// --- 1. THE SLEDGEHAMMER CORS FIX ---
-app.use(cors()); // Accepts requests from ANY domain
-app.options('*', cors()); // Explicitly forces the "preflight" check to pass
+// --- 1. BULLETPROOF CORS & EXPRESS SETUP (Must be at the very top) ---
+app.use(cors({
+    origin: [
+        'http://localhost:5173', 
+        'https://innovate-indai.vercel.app',
+        'https://app.hospitalprojectconsultancy.com' // <-- VIP Access for your live site
+    ],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type'],
+    credentials: true
+}));
+
+app.use(express.json());
 
 // --- 2. SUPABASE SETUP ---
 const supabaseUrl = process.env.SUPABASE_URL || 'https://udljxsjkqdrpqmxamwkd.supabase.co';
@@ -21,7 +31,7 @@ const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
     secure: true,
-    family: 4, // Forces IPv4 to bypass Render's block
+    family: 4, // Forces IPv4 to bypass Render's strict firewall rules
     auth: {
         user: 'innovateindiasurat@gmail.com',
         pass: 'nolgiakguylscrnh' 
@@ -36,15 +46,24 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
     try {
         console.log("--- STARTING GENERATION ---");
 
-        // Save to Database
+        // Save the lead to Supabase Database
         try {
             await supabase.from('projects').insert([{ 
-                project_name: projectName, director_email: email, tier: "Tier " + cityTier, 
-                bed_capacity: bedCount, specialty_focus: specialtyFocus, total_built_up_area: totalArea,
-                num_floors: numFloors, status: 'feasibility_lead'
+                project_name: projectName, 
+                director_email: email, 
+                tier: "Tier " + cityTier, 
+                bed_capacity: bedCount, 
+                specialty_focus: specialtyFocus, 
+                total_built_up_area: totalArea,
+                num_floors: numFloors, 
+                status: 'feasibility_lead'
             }]);
-        } catch (dbErr) { console.error("DB Error:", dbErr.message); }
+            console.log("Lead saved to database.");
+        } catch (dbErr) { 
+            console.error("DB Error:", dbErr.message); 
+        }
 
+        // Launch Puppeteer (Headless Chrome)
         browser = await puppeteer.launch({ 
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'], 
             headless: "new" 
@@ -52,6 +71,7 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
         
         const page = await browser.newPage();
         
+        // The PDF Design Template
         const htmlContent = `
         <html>
         <head>
@@ -88,7 +108,7 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
         await browser.close();
         console.log("PDF generated successfully.");
 
-        // Attempt Email
+        // Attempt Email Delivery
         console.log("Attempting to send backup email...");
         try {
             const mailOptions = {
@@ -104,7 +124,7 @@ app.post('/api/admin/generate-pdf', async (req, res) => {
             console.log("Email blocked by Render firewall, but proceeding to direct download anyway. Error:", emailErr.message);
         }
 
-        // Return PDF to Browser
+        // Return PDF to Browser for Download
         console.log("Returning PDF for direct browser download...");
         res.status(200).json({ 
             success: true, 
