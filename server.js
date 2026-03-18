@@ -7,19 +7,9 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 
-// --- 1. CORS & EXPRESS SETUP (Must be at the very top) ---
-app.use(cors({
-    origin: [
-        'http://localhost:5173', 
-        'https://innovate-indai.vercel.app',
-        'https://app.hospitalprojectconsultancy.com' // <-- VIP Access for Hostinger
-    ],
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
-    credentials: true
-}));
-
-app.use(express.json());
+/// --- 1. THE SLEDGEHAMMER CORS FIX ---
+app.use(cors()); // Accepts requests from ANY domain
+app.options('*', cors()); // Explicitly forces the "preflight" check to pass
 
 // --- 2. SUPABASE SETUP ---
 const supabaseUrl = process.env.SUPABASE_URL || 'https://udljxsjkqdrpqmxamwkd.supabase.co';
